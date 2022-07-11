@@ -1,0 +1,11 @@
+env/*/bin
+env/*/include
+env/*/lib
+env/*/lib64
+env/*/pyvenv.cfg
+
+logs/*.out
+logs/*.err
+
+.snakemake/*
+
