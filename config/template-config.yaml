@@ -1,0 +1,10 @@
+---
+# File Name: template-config.yaml
+# Created By: ZW
+# Created On: 2022-07-07
+# Purpose: Template configuration for the BOLT-LMM GWAS pipeline
+
+analysis_name: 'LV-ATAC-Seq'
+working_directory: '`pwd`'
+files:
+    - {"run":"run_A", "fq1": 'reads-1.fastq.gz' "fq2": "reads-2.fastq.gz" }
