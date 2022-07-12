@@ -7,4 +7,13 @@
 analysis_name: 'LV-ATAC-Seq'
 working_directory: '`pwd`'
 files:
-    - {"run":"run_A", "fq1": 'reads-1.fastq.gz' "fq2": "reads-2.fastq.gz" }
+ - {"run": "run_A",
+    "fq1": "readsA-1.fastq.gz",
+    "fq2": "readsB-2.fastq.gz",
+    "annos": {"cell_type": 'ctA'}
+ }
+ - {"run": "run_B",
+    "fq1": "readsB-1.fastq.gz",
+    "fq2": "readsB-2.fastq.gz",
+    "annos": {"cell_type": 'ctB'}
+ }
