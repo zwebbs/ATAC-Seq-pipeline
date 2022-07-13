@@ -4,16 +4,24 @@
 # Created On: 2022-07-07
 # Purpose: Template configuration for the BOLT-LMM GWAS pipeline
 
-analysis_name: 'LV-ATAC-Seq'
-working_directory: '`pwd`'
-files:
- - {"run": "run_A",
-    "fq1": "readsA-1.fastq.gz",
-    "fq2": "readsB-2.fastq.gz",
-    "annos": {"cell_type": 'ctA'}
- }
- - {"run": "run_B",
-    "fq1": "readsB-1.fastq.gz",
-    "fq2": "readsB-2.fastq.gz",
-    "annos": {"cell_type": 'ctB'}
- }
+global_config:
+  analysis_name: 'LV-ATAC-Seq'
+  working_directory: '`pwd`'
+  files:
+    - {"run": "run_A",
+       "fq1": "readsA-1.fastq.gz",
+       "fq2": "readsB-2.fastq.gz",
+       "annos": {"cell_type": 'ctA'}
+    }
+    - {"run": "run_B",
+       "fq1": "readsB-1.fastq.gz",
+       "fq2": "readsB-2.fastq.gz",
+       "annos": {"cell_type": 'ctB'}
+    }
+rules_config:
+  BWA_Index_Reference:
+    resources:
+      walltime: "02:30:00",
+      nodes: 1,
+      processors_per_node: 4,
+      total_memory: 8000
