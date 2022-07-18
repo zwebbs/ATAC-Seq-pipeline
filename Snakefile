@@ -2,18 +2,34 @@
 # Created By: ZW
 # Created On: 2022-07-12
 # Purpose: Runs the snakemake controller for the ATAC-Seq pipeline
-# 
+
+# Module Imports
+# ----------------------------------------------------------------------------
+
+from gardnersnake import Configuration
+from pathlib import Path
 
 
-# rule Global:
+# Global Configuration
+# ----------------------------------------------------------------------------
+configpath = Path(configfile)
+cfg = Configuration(filepath=configpath)
+global_params = cfg.global_params
 
-rpars_bwa_index
+
+
+
+
+
+rp_bwa_index = cfg.rule_params.BWA_Index_Reference
 rule BWA_Index_Reference:
-    input: fasta_path = resolve_file(config, keys="", "reference_fasta",exists=True)
+    input: global_params.reference_fasta
     output: 
-        index = resolve_file(config, keys="", referenceexists=False)    
+        index_dir = global_params.files.reference_fasta_index_dir,
         valid_dir = "rc.BWA_Index_Reference.out"
-    
+    resources:
+        **rp_bwa_index.resources,
+        job_id=""
     envmodules:
         "gcc/6.2.0",
         "bwa/0.7.17"
