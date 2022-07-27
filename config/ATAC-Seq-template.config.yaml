@@ -1,0 +1,25 @@
+---
+# File Name: template-config.yaml
+# Created By: ZW
+# Created On: 2022-07-07
+# Purpose: Template configuration for the ATAC-Seq pipeline
+---
+DOC_TYPE: "GLOBAL_CONFIG"
+analysis_name: 'ATAC-Seq-pipeline'
+working_directory: '`pwd`'
+reference_directory: '/path/to/references/'
+files: {
+  reference_fasta: "path/to/genome/in/references/dir/"
+  sequencing: []
+}
+---
+DOC_TYPE: "RULE_CONFIG" 
+rule_name: "BWA_Index_Reference",
+resources: {
+  walltime: "02:30:00",
+  nodes: 1,
+  cpus_per_node: 4,
+  total_memory_mb: 8000
+}
+parameters: {}
+---
