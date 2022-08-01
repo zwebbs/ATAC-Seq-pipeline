@@ -12,7 +12,7 @@
 ###   -c <analysis configuration file .yaml> [required]
 ###   -d (BOOLEAN flag to complete a snakemake dry run) [optional]
 
-PIPELINE_NAME="ATAC-Seq-Pipeline"
+PIPELINE_NAME="ATAC-Seq-pipeline"
 
 while getopts ":j:c:d" 'opt';
 do

@@ -5,49 +5,45 @@
 
 # Module Imports
 # ----------------------------------------------------------------------------
-
 from gardnersnake import Configuration
 from pathlib import Path
 
 
-# Global Configuration and global outputs
+# Global Configuration
 # ----------------------------------------------------------------------------
-configpath = Path(configfile)
-cfg = Configuration(filepath=configpath)
-global_pars = cfg.global_params
+yaml_config_filepath = Path(config["yaml_config"])
+cfg = Configuration(filepath=yaml_config_filepath)
+cfg.load()
+
+GLOBALS = cfg.global_params
+WORKDIR = GLOBALS.working_directory
+REF = Path(GLOBALS.files.reference_fasta)
+
+# set analysis workdir
+workdir: WORKDIR
+
+# build a map of the sequencing data
+# TODO: implement map that suits ATAC data
+#
 
 
-rule all:
-    input:
-        "rc.bwa_index_dir.out"
-
-# Rule 0. Create BWA Index from FASTA Reference if not already present
+# Rule 0. Pipeline Global Returns
 # ----------------------------------------------------------------------------
-rulepars_verify_index = cfg.rule_params.Verify_Index_Contents
-rulepars_bwa_index = cfg.rule_params.BWA_Index_Reference
-index_prefix = Path(global_params.files.reference_fasta_index_prefix).resolve()
-index_dir = index_prefix.parent
-index_files = [str(index_prefix / ext) for ext in (".amb",".ann",".bwt",".pac",".sa")]
+rule All:
+    input: (REF.parent / "BWA_Index_Reference.rc.out")
 
-# if the index directory already exists, check that the files are all there
-# throw an error if not. I.e. if the index directory exists, it should be well
-# formed and contain the necessary files. (the easiest way to achieve this is)
-# to have a new subdirectory explicitly for the index
-if index_dir.exists():
-    rule Verify_Index_Contents:
-    	input: manifest=index_files, checkdir=str(index_dir)
-	output: rc="rc.bwa_index_dir.out"
-    	resources: **rulepars_verify_index.resources, job_id=""
-	shell:
-	    "check_directory -o {output.rc} {input.manifest} {input.checkdir}"
-else:
-    rule BWA_Index_Reference:
-	input: fasta_path = global_params.reference_fasta
-        output: rc="rc.bwa_index_dir.out"
-	params: index_dir=index_dir
-    	resources: **rulepars_bwa_index.resources, job_id=""
-    	envmodules: "gcc/6.2.0", "bwa/0.7.17"
-        shell:
-            "bwa index -p {params.index_dir} {input.fasta_path}"
-    
+
+# Rule 1. Create BWA Index from FASTA Reference
+# -----------------------------------------------------------------------------
+bwa_index_rp = cfg.get_rule_params(rulename="BWA_Index_Reference")
+rule BWA_Index_Reference:
+    input: fasta_path = REF
+    params:  **(bwa_index_rp.parameters), index_dir = REF.parent
+    resources:  **(bwa_index_rp.resources), job_id = "glob"
+    envmodules: *(bwa_index_rp.parameters.envmodules)
+    output: rc = (REF.parent / "BWA_Index_Reference.rc.out")
+    shell:
+        "bwa index {input.fasta_path}"
+        " && check_directory -o {output.rc}"
+        " {params.index_files} {params.index_dir}"
 
