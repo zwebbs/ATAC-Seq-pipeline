@@ -40,7 +40,6 @@ rule BWA_Index_Reference:
     input: fasta_path = REF
     params:  **(bwa_index_rp.parameters), index_dir = REF.parent
     resources:  **(bwa_index_rp.resources), job_id = "glob"
-    envmodules: *(bwa_index_rp.parameters.envmodules)
     output: rc = (REF.parent / "BWA_Index_Reference.rc.out")
     shell:
         "bwa index {input.fasta_path}"

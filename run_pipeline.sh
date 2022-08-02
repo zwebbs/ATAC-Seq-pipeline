@@ -12,7 +12,7 @@
 ###   -c <analysis configuration file .yaml> [required]
 ###   -d (BOOLEAN flag to complete a snakemake dry run) [optional]
 
-PIPELINE_NAME="ATAC-Seq-pipeline"
+PIPELINE_NAME="EHT-Test-ATAC-Seq"
 
 while getopts ":j:c:d" 'opt';
 do
@@ -40,7 +40,7 @@ echo "Selected config file: ${config_file}"
 echo "dry run ?: ${dry_run_flag}"
 
 # run the snakemake workflow
-snakemake --snakefile Snakefile \
+snakemake --snakefile Snakefile --use-envmodules \
     -j ${parallel_jobs} -kp --rerun-incomplete \
     --config yaml_config=${config_file} \
     --cluster "sbatch --job-name={rulename}_{resources.job_id} \
