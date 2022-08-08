@@ -39,9 +39,20 @@ echo "Number of concurrent jobs: ${parallel_jobs}"
 echo "Selected config file: ${config_file}"
 echo "dry run ?: ${dry_run_flag}"
 
+
+# load modules
+module load python/cpython-3.8.5
+module load java/1.8
+module load samtools/1.9
+
+
+# set script globals
+export PICARD="/home/zweber/tools/gatk-4.2.6.1/picard.jar"
+
 # run the snakemake workflow
 snakemake --snakefile Snakefile --use-envmodules \
     -j ${parallel_jobs} -kp --rerun-incomplete \
+    --default-resources mem_mb=64000 disk_mb=100000 \
     --config yaml_config=${config_file} \
     --cluster "sbatch --job-name={rulename}_{resources.job_id} \
      --partition=broadwl \
