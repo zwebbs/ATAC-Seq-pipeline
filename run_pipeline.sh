@@ -44,6 +44,7 @@ echo "dry run ?: ${dry_run_flag}"
 module load python/cpython-3.8.5
 module load java/1.8
 module load samtools/1.9
+module load R/4.1.0
 
 
 # set script globals

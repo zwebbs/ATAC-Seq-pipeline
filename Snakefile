@@ -18,9 +18,14 @@ cfg.load()
 GLOBALS = cfg.global_params
 WORKDIR = GLOBALS.working_directory
 REF = Path(GLOBALS.files.reference_fasta)
+
+# define directories
 ALIGN_DIR = Path(GLOBALS.misc.align_directory)
 SCRATCH_DIR = Path(GLOBALS.misc.scratch_directory)
 SCRIPTS_DIR = Path(GLOBALS.misc.scripts_directory)
+PLOT_DIR = Path(GLOBALS.misc.plot_directory)
+WIG_DIR = Path(GLOBALS.misc.wig_directory)
+PEAKS_DIR = Path(GLOBALS.misc.peaks_directory)
 
 # set analysis workdir
 workdir: WORKDIR
@@ -50,8 +55,13 @@ rule All:
         expand(ALIGN_DIR / "{run_id}.sorted.dedup.bam",run_id=RUN_IDS),
         expand(ALIGN_DIR / "{run_id}.sorted.dedup.bam.bai", run_id=RUN_IDS),
         expand(ALIGN_DIR / "{run_id}.sorted.filt.bam", run_id=RUN_IDS),
-        expand(ALIGN_DIR / "{run_id}.filt.metrics.txt", run_id=RUN_IDS),
-        expand(ALIGN_DIR / "{exp_id}.sorted.merged.bam", exp_id=EXPS)
+        expand(ALIGN_DIR / "{run_id}.filt.metrics.txt", run_id=RUN_IDS), 
+        expand(PLOT_DIR / "{run_id}.diagnostics.pdf", run_id=RUN_IDS),
+        expand(ALIGN_DIR / "{exp_id}.sorted.merged.bam", exp_id=EXPS),
+        expand(PLOT_DIR / "{exp_id}.merged.diagnostics.pdf", exp_id=EXPS),
+        expand(WIG_DIR / "{exp_id}.coverage.bw", exp_id=EXPS),
+        expand(PEAKS_DIR / "{exp_id}_peaks.narrowPeak", exp_id=EXPS),
+        expand(PEAKS_DIR / "{exp_id}_peaks.broadPeak", exp_id=EXPS)
 
 
 # Rule 1. Create BWA Index from FASTA Reference
@@ -140,7 +150,27 @@ rule DeepTools_Filter_And_Shift:
         " {output.filt_bam} && samtools index {output.filt_sort_bam}"
 
 
-# Rule 5. Merge BAMs for each experiment, using Picard and a python wrapper 
+# Rule 5. Plot diagnostics for individual alignments
+# -----------------------------------------------------------------------------
+plot_atac_diagnostics_rp = cfg.get_rule_params(rulename="Plot_ATAC_Diagnostics")
+rule Plot_ATAC_Diagnostics:
+    input: filt_sort_bam = (ALIGN_DIR / "{run_id}.sorted.filt.bam") 
+    params: **(plot_atac_diagnostics_rp.parameters),
+        plot_dir = PLOT_DIR, scripts_dir = SCRIPTS_DIR
+    resources: **(plot_atac_diagnostics_rp.resources),
+        job_id = lambda wildcards: f"{wildcards.run_id}"
+    output: plot = (PLOT_DIR / "{run_id}.diagnostics.pdf")
+    shell:
+        "mkdir -p {params.plot_dir} && "
+        "Rscript {params.scripts_dir}/plot_ATAC_diagnostics.R"
+        " --bam {input.filt_sort_bam}"
+        " --genome {params.genome}"
+        " --sample-name {resources.job_id}"
+        " --outfile {output.plot}"
+
+
+# TODO: implement exclusion lists for excluding problematic samples from merging
+# Rule 6. Merge BAMs for each experiment, using Picard and a python wrapper 
 # -----------------------------------------------------------------------------
 merge_exp_bams_rp = cfg.get_rule_params(rulename="Merge_Experiment_BAMs")
 rule Merge_Experiment_BAMs:
@@ -164,20 +194,53 @@ rule Merge_Experiment_BAMs:
         " --java-args '-Xms{resources.java_mem_min}m -Xmx{resources.java_mem_max}m'"
 
 
-# Rule 6. Plot diagnostics for individual runs
+# Rule 7. Rerun diagnostic plots on the merged files
 # -----------------------------------------------------------------------------
-#dagnostics_rp = cfg.get_rule_params(rulename="Plot_ATAC_Diagnostics")
-#rule Plot_ATAC_Diagnostics:
-#    pass
+use rule Plot_ATAC_Diagnostics as Plot_Merged_ATAC_Diagnostics with:
+    input: filt_sort_bam = (ALIGN_DIR / "{exp_id}.sorted.merged.bam")
+    resources: **(plot_atac_diagnostics_rp.resources),
+        job_id = lambda wildcards: f"{wildcards.exp_id}"
+    output: plot = (PLOT_DIR / "{exp_id}.merged.diagnostics.pdf")
 
 
-# Rule 5. Call open chromatin peaks using MACS2
+# Rule 8. Create bigwig files from Experiment-merged BAMs
 # -----------------------------------------------------------------------------
-# rule MACS3_Peak_Calling:
-#   shell:
-#       "macs3 callpeak -f BAMPE -t {input.bam} -g hs -n {resrouces.run_id} -B -q 0.01"
+deeptools_bam_coverage_rp = cfg.get_rule_params(rulename="DeepTools_bamCoverage")
+rule DeepTools_bamCoverage:
+    input: merged_bam = (ALIGN_DIR / "{exp_id}.sorted.merged.bam")
+    params: **(deeptools_bam_coverage_rp.parameters), wig_dir = WIG_DIR
+    resources: **(deeptools_bam_coverage_rp.resources),
+        job_id = lambda wildcards: f"{wildcards.exp_id}"
+    output: bw = (WIG_DIR / "{exp_id}.coverage.bw")
+    shell:
+        "mkdir -p {params.wig_dir} && "
+        "bamCoverage --binSize {params.binsize}"
+        " --normalizeUsing {params.norm_strategy}"
+        " --effectiveGenomeSize {params.effective_gen_size}"
+        " --numberOfProcessors {resources.cpus_per_node}"
+        " -b {input.merged_bam} -o {output.bw}"
 
 
+# Rule 9. Call open chromatin peaks using MACS2
+# -----------------------------------------------------------------------------
+macs2_peakcalling_rp = cfg.get_rule_params(rulename="MACS2_Peak_Calling")
+rule MACS2_Peak_Calling:
+    input: merged_bam = (ALIGN_DIR / "{exp_id}.sorted.merged.bam")
+    params: **(macs2_peakcalling_rp.parameters), peaks_dir = PEAKS_DIR
+    resources: **(macs2_peakcalling_rp.resources),
+        job_id = lambda wildcards: f"{wildcards.exp_id}"
+    output: (PEAKS_DIR / "{exp_id}_peaks.narrowPeak"),
+        (PEAKS_DIR / "{exp_id}_peaks.broadPeak")
+    shell:
+       "mkdir -p {params.peaks_dir} && "
+       "macs2 callpeak -f BAMPE"
+       " -t {input.merged_bam} --outdir {params.peaks_dir}"
+       " -g hs -B -q {params.qvalue_thresh}"
+       " -n {resources.job_id} {params.extra_args} && "
+       "macs2 callpeak -f BAMPE"
+       " -t {input.merged_bam} --outdir {params.peaks_dir}"
+       " -g hs -B -q {params.qvalue_thresh} --broad"
+       " -n {resources.job_id} {params.extra_args}"
 
 # Rule 5. Call open chromatin peaks using HOMER
 # -----------------------------------------------------------------------------
