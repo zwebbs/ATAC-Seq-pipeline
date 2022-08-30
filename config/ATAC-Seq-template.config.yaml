@@ -3,18 +3,59 @@
 # Created By: ZW
 # Created On: 2022-07-07
 # Purpose: Template configuration for the ATAC-Seq pipeline
----
-DOC_TYPE: "GLOBAL_CONFIG"
-analysis_name: 'ATAC-Seq-pipeline'
-working_directory: '`pwd`'
-files: {
-  reference_fasta: "/path/to/genome/reference.fa.gz"
 
-  sequencing: []
+DOC_TYPE: "GLOBAL_CONFIG"
+analysis_name: "ATAC-Seq-pipeline"
+working_directory: "/my/working/dir/"
+directories: {
+  align_directory: "/my/working/dir/data/align/",
+  plot_directory: "/my/working/dir/analysis/plots/",
+  wig_directory: "/my/working/dir/data/wig/",
+  peaks_directory: "/my/working/dir/analysis/peaks/",
+  scripts_directory: "/my/working/dir/scripts/",
+  scratch_directory: "/my/scratch/dir/",
+}
+files: {
+  reference_fasta: "/my/ref/dir/genomes/GRCh38_p13.fa",
+  reference_blacklist: "/my/ref/dir/genomes/GRCh38_p13.blacklist.bed", 
+  sequencing: [
+  {
+    run_id: "SampleA-1",
+    reads_1: "/my/working/dir/data/fastq/SampleA-1_S1_R1_001.fastq.gz",
+    reads_2: "/my/working/dir/data/fastq/SampleA-1_S1_R2_001.fastq.gz",
+    library_id: "SampleA",
+    experiment_id: "Cells_Type_1",
+    random_annotation: "ugly"
+  },
+  {
+    run_id: "SampleB-1",
+    reads_1: "/my/working/dir/data/fastq/SampleB-1_S2_R1_001.fastq.gz",
+    reads_2: "/my/working/dir/data/fastq/SampleB-1_S2_R2_001.fastq.gz",
+    library_id: "SampleB",
+    experiment_id: "Cells_Type_1",
+    random_annotation: "pretty"
+  },
+  {
+    run_id: "SampleC-1",
+    reads_1: "/my/working/dir/data/fastq/SampleC-1_S1_R1_001.fastq.gz",
+    reads_2: "/my/working/dir/data/fastq/SampleC-1_S1_R2_001.fastq.gz",
+    library_id: "SampleC",
+    experiment_id: "Cells_Type_2",
+    random_annotation: "pretty"
+  },
+  {
+    run_id: "SampleD-1",
+    reads_1: "/my/working/dir/data/fastq/SampleD-1_S2_R1_001.fastq.gz",
+    reads_2: "/my/working/dir/data/fastq/SampleD-1_S2_R2_001.fastq.gz",
+    library_id: "SampleD",
+    experiment_id: "Cells_Type_2",
+    random_annotation: "ugly"
+  }
+  ]
 }
 ---
 DOC_TYPE: "RULE_CONFIG" 
-rule_name: "BWA_Index_Reference",
+rule_name: "BWA_Index_Reference"
 resources: {
   walltime: "02:30:00",
   nodes: 1,
@@ -22,8 +63,94 @@ resources: {
   total_memory_mb: 8000
 }
 parameters: {
-  index_files: ["reference.amb", "reference.ann",
-    "reference.bwt", "reference.pac", "reference.sa"
-  ]
+  index_files: ["GRCh38_p13.fa.amb", "GRCh38_p13.fa.ann",
+    "GRCh38_p13.fa.bwt", "GRCh38_p13.fa.pac", "GRCh38_p13.fa.sa"]
 }
 ---
+DOC_TYPE: "RULE_CONFIG"
+rule_name: "BWA_MEM_Align"
+resources: {
+  walltime: "4:00:00",
+  nodes: 1,
+  cpus_per_node: 7,
+  total_memory_mb: 16000
+}
+parameters: {
+  extra_args: "-M",
+  threads: 6
+}
+---
+DOC_TYPE: "RULE_CONFIG"
+rule_name: "Picard_Mark_Duplicates"
+resources: {
+  walltime: "02:00:00",
+  nodes: 1,
+  cpus_per_node: 7,
+  total_memory_mb: 24000
+}
+parameters: {
+  extra_args: "VERBOSITY=DEBUG USE_JDK_INFLATER=true USE_JDK_DEFLATER=true"
+}
+---
+DOC_TYPE: "RULE_CONFIG"
+rule_name: "DeepTools_Filter_And_Shift"
+resources: {
+  walltime: "01:30:00",
+  nodes: 1,
+  cpus_per_node: 6,
+  total_memory_mb: 16000
+}
+parameters: {
+  extra_args: "--verbose"
+}
+---
+DOC_TYPE: "RULE_CONFIG"
+rule_name: "Plot_ATAC_Diagnostics"
+resources: {
+  walltime: "01:00:00",
+  nodes: 1,
+  cpus_per_node: 2,
+  total_memory_mb: 16000
+}
+parameters: {
+  genome: "hg38"
+}
+---
+DOC_TYPE: "RULE_CONFIG"
+rule_name: "Merge_Experiment_BAMs"
+resources: {
+  walltime: "01:30:00",
+  nodes: 1,
+  cpus_per_node: 6,
+  total_memory_mb: 24000
+}
+parameters: {
+  picard_extra_args: "AS=true CREATE_INDEX=true USE_THREADING=true"
+}
+---
+DOC_TYPE: "RULE_CONFIG"
+rule_name: "DeepTools_bamCoverage"
+resources: {
+  walltime: "01:30:00",
+  nodes: 1,
+  cpus_per_node: 6,
+  total_memory_mb: 16000
+}
+parameters: {
+  binsize: 5,
+  norm_strategy: "RPGC",
+  effective_gen_size: 2913022398
+}
+---
+DOC_TYPE: "RULE_CONFIG"
+rule_name: "MACS2_Peak_Calling"
+resources: {
+  walltime: "03:00:00",
+  nodes: 1,
+  cpus_per_node: 6,
+  total_memory_mb: 24000
+}
+parameters: {
+  qvalue_thresh: 0.01,
+  extra_args: ""
+}
