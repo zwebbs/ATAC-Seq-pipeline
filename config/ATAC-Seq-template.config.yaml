@@ -12,8 +12,10 @@ directories: {
   plot_directory: "/my/working/dir/analysis/plots/",
   wig_directory: "/my/working/dir/data/wig/",
   peaks_directory: "/my/working/dir/analysis/peaks/",
+  metrics_directory: "/my/working/dir/analysis/metrics/",
   scripts_directory: "/my/working/dir/scripts/",
   scratch_directory: "/my/scratch/dir/",
+  logs_directory: "/my/working/dir/logs/"
 }
 files: {
   reference_fasta: "/my/ref/dir/genomes/GRCh38_p13.fa",
@@ -102,18 +104,6 @@ resources: {
 }
 parameters: {
   extra_args: "--verbose"
-}
----
-DOC_TYPE: "RULE_CONFIG"
-rule_name: "Plot_ATAC_Diagnostics"
-resources: {
-  walltime: "01:00:00",
-  nodes: 1,
-  cpus_per_node: 2,
-  total_memory_mb: 16000
-}
-parameters: {
-  genome: "hg38"
 }
 ---
 DOC_TYPE: "RULE_CONFIG"

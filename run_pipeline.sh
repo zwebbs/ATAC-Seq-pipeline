@@ -57,13 +57,13 @@ snakemake --snakefile Snakefile --use-envmodules \
     --config yaml_config=${config_file} \
     --cluster "sbatch --job-name={rulename}_{resources.job_id} \
      --partition=broadwl \
-     --error=logs/{rulename}_{resources.job_id}.err \
-     --output=logs/{rulename}_{resources.job_id}.out \
+     --error={resources.logs}/{rulename}_{resources.job_id}.err \
+     --output={resources.logs}/{rulename}_{resources.job_id}.out \
      --nodes={resources.nodes} \
      --ntasks-per-node={resources.cpus_per_node} \
      --mem={resources.total_memory_mb} \
      --time={resources.walltime}" \
-     ${dry_run_flag} 1>  "logs/${PIPELINE_NAME}.out" 2> "logs/${PIPELINE_NAME}.err"
+     ${dry_run_flag} 1>  "${PIPELINE_NAME}.out" 2> "${PIPELINE_NAME}.err"
 
 # write that the pipeline is complete
 echo "-----------------------------"
