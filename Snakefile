@@ -7,6 +7,7 @@
 # ----------------------------------------------------------------------------
 from gardnersnake import Configuration
 from pathlib import Path
+from src.utils import filter_run_ids 
 
 
 # Global Configuration
@@ -22,26 +23,25 @@ workdir: WORKDIR
 
 # define directories and files objects
 DIRECTORIES = GLOBALS.misc.directories
-FILES = GLOBALS.misc.files
+FILES = GLOBALS.files
 
 # define specific directories that are used often
 SCRATCH_DIR = Path(DIRECTORIES.scratch_directory)
 ALIGN_DIR = Path(DIRECTORIES.align_directory)
 METRICS_DIR = Path(DIRECTORIES.metrics_directory)
 SCRIPTS_DIR = Path(DIRECTORIES.scripts_directory)
-PLOTS_DIR = Path(DIRECTORIES.plots_directory)
 WIG_DIR = Path(DIRECTORIES.wig_directory)
 PEAKS_DIR = Path(DIRECTORIES.peaks_directory)
 LOGS_DIR = Path(DIRECTORIES.logs_directory)
 
 # define specific files that are used often
-REF = FILES.reference_fasta
+REF = Path(FILES.reference_fasta)
 SEQ = FILES.sequencing
 
 # build a map of the sequencing data
 RUN_IDS = [seq_run["run_id"] for seq_run in SEQ]
-EXP_IDS = [seq_run["experiment_id"] for seq_run in SEQ]
-EXPS = list(set(EXP_IDS))
+LIB_IDS = [seq_run["library_id"] for seq_run in SEQ]
+LIBS = list(set(LIB_IDS))
 SEQ_MAP = dict(zip(RUN_IDS, SEQ))
 
 # set chromosomes for analysis
@@ -59,23 +59,25 @@ rule All:
         (REF.parent / "BWA_Index_Reference.rc.out"),
         expand(METRICS_DIR / "{run_id}.dedup.metrics.txt",run_id=RUN_IDS),
         expand(ALIGN_DIR / "{run_id}.sorted.filt.bam", run_id=RUN_IDS),
-        expand(METRICS_DIR / "{run_id}.filt.metrics.txt", run_id=RUN_IDS), 
-        expand(ALIGN_DIR / "{exp_id}.sorted.merged.bam", exp_id=EXPS),
-        expand(WIG_DIR / "{exp_id}.coverage.bw", exp_id=EXPS),
-        expand(PEAKS_DIR / "{exp_id}_peaks.narrowPeak", exp_id=EXPS),
-        expand(PEAKS_DIR / "{exp_id}_peaks.broadPeak", exp_id=EXPS)
+        expand(METRICS_DIR / "{run_id}.filtshift.metrics.txt", run_id=RUN_IDS), 
+        expand(ALIGN_DIR / "{lib_id}.sorted.merged.bam", lib_id=LIBS),
+        expand(WIG_DIR / "{lib_id}.coverage.bw", lib_id=LIBS),
+        expand(PEAKS_DIR / "{lib_id}_peaks.narrowPeak", lib_id=LIBS),
+        expand(PEAKS_DIR / "{lib_id}_summits.bed", lib_id=LIBS),
+        expand(PEAKS_DIR / "{lib_id}_peaks_fw.bed", lib_id=LIBS)
 
 
 # Rule 1. Create BWA Index from FASTA Reference
 # -----------------------------------------------------------------------------
 bwa_index_rp = cfg.get_rule_params(rulename="BWA_Index_Reference")
 rule BWA_Index_Reference:
-    input: fasta_path = REF
+    input: 
+        fasta_path = REF
     params: **(bwa_index_rp.parameters),
         index_dir = REF.parent
     resources: **(bwa_index_rp.resources),
         job_id = "glob",
-        logs = LOGS_DIR
+        logs = str(LOGS_DIR)
     output: rc = (REF.parent / "BWA_Index_Reference.rc.out")
     shell:
         "bwa index {input.fasta_path}"
@@ -94,7 +96,7 @@ rule BWA_MEM_Align:
         ref_prefix = REF
     resources: **(bwa_mem_align_rp.resources),
         job_id = lambda wildcards: f"{wildcards.run_id}",
-        logs = LOGS_DIR
+        logs = str(LOGS_DIR)
     output: 
         bam = temp(SCRATCH_DIR / "{run_id}.sorted.bam"),
         bai = temp(SCRATCH_DIR / "{run_id}.sorted.bam.bai")
@@ -114,18 +116,19 @@ rule Picard_Mark_Duplicates:
         bam = rules.BWA_MEM_Align.output.bam,
         bai = rules.BWA_MEM_Align.output.bai
     params: **(gatk_markdups_rp.parameters),
-        tmp_dir = lambda wildcards: SCRATCH_DIR / f"{wildcards.run_id}-dedup/temp/"
+        tmp_dir = lambda wildcards: SCRATCH_DIR / f"{wildcards.run_id}-dedup/temp/",
+        metrics_dir = METRICS_DIR
     resources: **(gatk_markdups_rp.resources), 
         job_id = lambda wildcards: f"{wildcards.run_id}",
         java_mem_max = round(0.75*(gatk_markdups_rp.resources.total_memory_mb)),
         java_mem_min = 2000,
-        logs = LOGS_DIR
+        logs = str(LOGS_DIR)
     output:
         metrics = (METRICS_DIR / "{run_id}.dedup.metrics.txt"),
         bam_dedup = temp(SCRATCH_DIR / "{run_id}-dedup/{run_id}.sorted.dedup.bam"),
         bai_dedup = temp(SCRATCH_DIR / "{run_id}-dedup/{run_id}.sorted.dedup.bam.bai")
     shell:
-        "mkdir -p {params.tmp_dir} && "
+        "mkdir -p {params.tmp_dir} {params.metrics_dir} && "
         "java -Xms{resources.java_mem_min}m -Xmx{resources.java_mem_max}m"
         " -jar $PICARD MarkDuplicates"
         " I={input.bam} M={output.metrics} TMP_DIR={params.tmp_dir}"
@@ -141,12 +144,12 @@ rule DeepTools_Filter_And_Shift:
     input: 
         dedup_bam = rules.Picard_Mark_Duplicates.output.bam_dedup,
         dedup_bai = rules.Picard_Mark_Duplicates.output.bai_dedup,
-        blacklist = GLOBALS.files.reference_blacklist
+        blacklist = FILES.reference_blacklist
     params: **(deeptools_filt_shift_rp.parameters),
         allowed_chrs = ALLOWED_CHRS
     resources: **(deeptools_filt_shift_rp.resources),
         job_id = lambda wildcards: f"{wildcards.run_id}",
-        logs = LOGS_DIR
+        logs = str(LOGS_DIR)
     output:
         prefilt_bam = temp(SCRATCH_DIR / "{run_id}.sorted.prefilt.bam"),
         prefilt_bai = temp(SCRATCH_DIR / "{run_id}.sorted.prefilt.bam.bai"),
@@ -165,51 +168,47 @@ rule DeepTools_Filter_And_Shift:
         " {output.filt_bam} && samtools index {output.filt_sort_bam}"
 
 
-# Rule 5. Plot diagnostics for individual alignments
-# -----------------------------------------------------------------------------
-# TODO implement script for fragment-length distribution and TSS-Enrichment
+# TODO: implement TSSe and FragLenDist for individual runs
 
 # TODO: implement exclusion lists for excluding problematic samples from merging
-# Rule 6. Merge BAMs for each experiment, using Picard and a python wrapper 
-# -----------------------------------------------------------------------------
-merge_exp_bams_rp = cfg.get_rule_params(rulename="Merge_Experiment_BAMs")
-rule Merge_Experiment_BAMs:
-    input: bams = expand(ALIGN_DIR / "{run_id}.sorted.filt.bam", run_id=RUN_IDS)
-    params: **(merge_exp_bams_rp.parameters), outdir = ALIGN_DIR,
-        scripts_dir = SCRIPTS_DIR, run_ids = RUN_IDS,
-        exp_ids = EXP_IDS, tmp_dir = (SCRATCH_DIR / "merge_tmp/")
-    resources: **(merge_exp_bams_rp.resources),
-        java_mem_max = round(0.75*(merge_exp_bams_rp.resources.total_memory_mb)),
-        java_mem_min = 2000,
-        job_id = "glob"
-    output: expand(ALIGN_DIR / "{exp_id}.sorted.merged.bam", exp_id=EXPS),
-        expand(ALIGN_DIR / "{exp_id}.bam_merge.list", exp_id=EXPS)
+# TODO: rename --exp-ids flag to --group-ids
+# TODO: check for already existing files and bam lists if no changes, skip the file merge
+# TODO: add --force to override file check
+
+# ----------------------------------------------------------------------------
+merge_lib_bams_rp = cfg.get_rule_params(rulename="Merge_Library_BAMs")
+rule Merge_Library_BAMs:
+    input: 
+        bams = lambda wildcards: expand(ALIGN_DIR / "{runs}.sorted.filt.bam",
+            runs=filter_run_ids(SEQ, library_id=f"{wildcards.lib_id}"))
+    params: **(merge_lib_bams_rp.parameters),
+        tmp_dir = (SCRATCH_DIR / "merge_tmp/")
+    resources: **(merge_lib_bams_rp.resources),
+        job_id = lambda wildcards: f"{wildcards.lib_id}",
+        logs = str(LOGS_DIR)
+    output:
+        merged_bam = (ALIGN_DIR / "{lib_id}.sorted.merged.bam")
     shell:
-        "mkdir -p {params.tmp_dir} && "
-        "python {params.scripts_dir}/merge_experiment_bams.py" 
-        " --picard-jar $PICARD --bams {input.bams}"
-        " --run-ids {params.run_ids} --exp-ids {params.exp_ids}"
-        " --outdir {params.outdir}"
-        " --picard-extra-args '{params.picard_extra_args} TMP_DIR={params.tmp_dir}'"
-        " --java-args '-Xms{resources.java_mem_min}m -Xmx{resources.java_mem_max}m'"
+        "mkdir -p {params.tmp_dir} && cd {params.tmp_dir} && "
+        "samtools merge -@{resources.cpus_per_node}"
+        " {output.merged_bam} {input.bams} && "
+        "samtools index -@{resources.cpus_per_node} {output.merged_bam}"
 
 
-# Rule 7. Rerun diagnostic plots on the merged files
-# -----------------------------------------------------------------------------
-# TODO: implement scipt for fragment-length distribution and TSS-Enrichment 
-
-
+# TODO: implement rule for TSSe and FragLengthDist for merged
 # Rule 8. Create bigwig files from Experiment-merged BAMs
 # -----------------------------------------------------------------------------
 deeptools_bam_coverage_rp = cfg.get_rule_params(rulename="DeepTools_bamCoverage")
 rule DeepTools_bamCoverage:
-    input: merged_bam = (ALIGN_DIR / "{exp_id}.sorted.merged.bam")
+    input: 
+        merged_bam = (ALIGN_DIR / "{lib_id}.sorted.merged.bam")
     params: **(deeptools_bam_coverage_rp.parameters),
         wig_dir = WIG_DIR
     resources: **(deeptools_bam_coverage_rp.resources),
-        job_id = lambda wildcards: f"{wildcards.exp_id}",
-        logs = LOGS_DIR
-    output: bw = (WIG_DIR / "{exp_id}.coverage.bw")
+        job_id = lambda wildcards: f"{wildcards.lib_id}",
+        logs = str(LOGS_DIR)
+    output: 
+        bw = (WIG_DIR / "{lib_id}.coverage.bw")
     shell:
         "mkdir -p {params.wig_dir} && "
         "bamCoverage --binSize {params.binsize}"
@@ -221,36 +220,29 @@ rule DeepTools_bamCoverage:
 
 # Rule 9. Call open chromatin peaks using MACS2
 # -----------------------------------------------------------------------------
-macs2_peakcalling_rp = cfg.get_rule_params(rulename="MACS2_Peak_Calling")
-rule MACS2_Peak_Calling:
-    input: merged_bam = (ALIGN_DIR / "{exp_id}.sorted.merged.bam")
-    params: **(macs2_peakcalling_rp.parameters),
+macs2_peakcalling_nrw_rp = cfg.get_rule_params(rulename="MACS2_Peak_Calling_Narrow")
+rule MACS2_Peak_Calling_Narrow:
+    input: 
+        merged_bam = (ALIGN_DIR / "{lib_id}.sorted.merged.bam"),
+        genome_size = FILES.reference_genome_sizes
+    params: **(macs2_peakcalling_nrw_rp.parameters),
         peaks_dir = PEAKS_DIR
-    resources: **(macs2_peakcalling_rp.resources),
-        job_id = lambda wildcards: f"{wildcards.exp_id}",
-        logs = LOGS_DIR
+    resources: **(macs2_peakcalling_nrw_rp.resources),
+        job_id = lambda wildcards: f"{wildcards.lib_id}",
+        logs = str(LOGS_DIR)
     output: 
-        narrow_peak = (PEAKS_DIR / "{exp_id}_peaks.narrowPeak"),
-        broad_peak = (PEAKS_DIR / "{exp_id}_peaks.broadPeak")
+        narrow_peak = (PEAKS_DIR / "{lib_id}_peaks.narrowPeak"),
+        summits_bed = (PEAKS_DIR / "{lib_id}_summits.bed"),
+        narrow_peak_fw = (PEAKS_DIR / "{lib_id}_peaks_fw.bed")
     shell:
        "mkdir -p {params.peaks_dir} && "
-       "macs2 callpeak -f BAMPE"
+       "macs2 callpeak -f BAMPE --call-summits"
        " -t {input.merged_bam} --outdir {params.peaks_dir}"
        " -g hs -B -q {params.qvalue_thresh}"
        " -n {resources.job_id} {params.extra_args} && "
-       "macs2 callpeak -f BAMPE"
-       " -t {input.merged_bam} --outdir {params.peaks_dir}"
-       " -g hs -B -q {params.qvalue_thresh} --broad"
-       " -n {resources.job_id} {params.extra_args}"
-
-# Rule 5. Call open chromatin peaks using HOMER
-# -----------------------------------------------------------------------------
-# TODO implement or delete
-
-# Rule 6. Generate consensus peak sets for cell type
-# -----------------------------------------------------------------------------
-# TODO implement for experiment
-
+       "bedtools slop -i {output.summits_bed}"
+       " -g {input.genome_size} -b {params.fixed_width_ext}"
+       " > {output.narrow_peak_fw}"
 
 
 

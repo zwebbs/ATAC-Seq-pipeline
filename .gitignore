@@ -6,6 +6,9 @@ env/*/pyvenv.cfg
 
 logs/*.out
 logs/*.err
+logs/*.log
+
+src/__pycache__/*
 
 .snakemake/*
 

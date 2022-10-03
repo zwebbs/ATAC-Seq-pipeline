@@ -12,7 +12,7 @@
 ###   -c <analysis configuration file .yaml> [required]
 ###   -d (BOOLEAN flag to complete a snakemake dry run) [optional]
 
-PIPELINE_NAME="EHT-Test-ATAC-Seq"
+PIPELINE_NAME="Encode-Heart-ATAC-Seq"
 
 while getopts ":j:c:d" 'opt';
 do
@@ -44,8 +44,7 @@ echo "dry run ?: ${dry_run_flag}"
 module load python/cpython-3.8.5
 module load java/1.8
 module load samtools/1.9
-module load R/4.1.0
-
+module load bedtools/2.27.1
 
 # set script globals
 export PICARD="/home/zweber/tools/gatk-4.2.6.1/picard.jar"
