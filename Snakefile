@@ -7,7 +7,7 @@
 # ----------------------------------------------------------------------------
 from gardnersnake import Configuration
 from pathlib import Path
-from src.utils import filter_run_ids 
+from src.utils import filter_seq_metadata 
 
 
 # Global Configuration
@@ -41,8 +41,11 @@ SEQ = FILES.sequencing
 # build a map of the sequencing data
 RUN_IDS = [seq_run["run_id"] for seq_run in SEQ]
 LIB_IDS = [seq_run["library_id"] for seq_run in SEQ]
+SAMPLE_TYPES = [seq_run["sample_type"] for seq_run in SEQ]
 LIBS = list(set(LIB_IDS))
+TYPES = list(set(SAMPLE_TYPES))
 SEQ_MAP = dict(zip(RUN_IDS, SEQ))
+
 
 # set chromosomes for analysis
 ALLOWED_CHRS = ["chr" + str(i) for i in [*list(range(1,23)),"X"]]
@@ -64,7 +67,9 @@ rule All:
         expand(WIG_DIR / "{lib_id}.coverage.bw", lib_id=LIBS),
         expand(PEAKS_DIR / "{lib_id}_peaks.narrowPeak", lib_id=LIBS),
         expand(PEAKS_DIR / "{lib_id}_summits.bed", lib_id=LIBS),
-        expand(PEAKS_DIR / "{lib_id}_peaks_fw.bed", lib_id=LIBS)
+        expand(PEAKS_DIR / "{lib_id}_peaks_fw.bed", lib_id=LIBS),
+        expand(PEAKS_DIR / "{sample_type}_peaks_fw.comb.bed", sample_type=TYPES),
+        expand(PEAKS_DIR / "{sample_type}_peaks_variable.merged.bed", sample_type=TYPES)
 
 
 # Rule 1. Create BWA Index from FASTA Reference
@@ -169,18 +174,14 @@ rule DeepTools_Filter_And_Shift:
 
 
 # TODO: implement TSSe and FragLenDist for individual runs
-
-# TODO: implement exclusion lists for excluding problematic samples from merging
-# TODO: rename --exp-ids flag to --group-ids
-# TODO: check for already existing files and bam lists if no changes, skip the file merge
-# TODO: add --force to override file check
-
+#
+# Rule 5. Merge BAM files belonging to the same library
 # ----------------------------------------------------------------------------
 merge_lib_bams_rp = cfg.get_rule_params(rulename="Merge_Library_BAMs")
 rule Merge_Library_BAMs:
     input: 
         bams = lambda wildcards: expand(ALIGN_DIR / "{runs}.sorted.filt.bam",
-            runs=filter_run_ids(SEQ, library_id=f"{wildcards.lib_id}"))
+            runs=filter_seq_metadata(SEQ, "run_id", library_id=f"{wildcards.lib_id}"))
     params: **(merge_lib_bams_rp.parameters),
         tmp_dir = (SCRATCH_DIR / "merge_tmp/")
     resources: **(merge_lib_bams_rp.resources),
@@ -196,7 +197,7 @@ rule Merge_Library_BAMs:
 
 
 # TODO: implement rule for TSSe and FragLengthDist for merged
-# Rule 8. Create bigwig files from Experiment-merged BAMs
+# Rule 6. Create bigwig files from library-merged BAMs
 # -----------------------------------------------------------------------------
 deeptools_bam_coverage_rp = cfg.get_rule_params(rulename="DeepTools_bamCoverage")
 rule DeepTools_bamCoverage:
@@ -218,7 +219,7 @@ rule DeepTools_bamCoverage:
         " -b {input.merged_bam} -o {output.bw}"
 
 
-# Rule 9. Call open chromatin peaks using MACS2
+# Rule 7. Call open chromatin peaks using MACS2
 # -----------------------------------------------------------------------------
 macs2_peakcalling_nrw_rp = cfg.get_rule_params(rulename="MACS2_Peak_Calling_Narrow")
 rule MACS2_Peak_Calling_Narrow:
@@ -243,6 +244,28 @@ rule MACS2_Peak_Calling_Narrow:
        "bedtools slop -i {output.summits_bed}"
        " -g {input.genome_size} -b {params.fixed_width_ext}"
        " > {output.narrow_peak_fw}"
+
+
+# Rule 8. Merge Peak Sets by Tissue/sample type, to generate 
+# variable length open chromatin intervals from the fixed-width peaks.
+# -----------------------------------------------------------------------------
+merge_fwpeaks_rp = cfg.get_rule_params(rulename="Merge_fwPeak_Sets")
+rule Merge_fwPeak_Sets:
+    input:
+        sample_beds = lambda wildcards: expand((PEAKS_DIR / "{libs}_peaks_fw.bed"),
+            libs=list(set(filter_seq_metadata(SEQ, "library_id",
+                sample_type=f"{wildcards.sample_type}"))))
+    params: **(merge_fwpeaks_rp.parameters)
+    resources: **(merge_fwpeaks_rp.resources),
+        job_id = lambda wildcards: f"{wildcards.sample_type}",
+        logs = str(LOGS_DIR)
+    output:
+        comb_sorted = (PEAKS_DIR / "{sample_type}_peaks_fw.comb.bed"),
+        merged_sorted = (PEAKS_DIR / "{sample_type}_peaks_variable.merged.bed")
+    shell:
+        "cat {input.sample_beds} | sort -k1,1V -k2,2n -k3,3n > {output.comb_sorted} && "
+        "bedtools merge -i {output.comb_sorted} -c 4,5,5,5 -o collapse,min,max,mean -delim '|'"
+        " > {output.merged_sorted}"
 
 
 
