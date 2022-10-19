@@ -8,6 +8,14 @@ logs/*.out
 logs/*.err
 logs/*.log
 
+
+results/metrics/*.metrics.txt
+results/peaks/*.bed
+results/peaks/*.bdg
+results/peaks/*.narrowPeak
+results/peaks/*.xls
+
+
 src/__pycache__/*
 
 .snakemake/*
