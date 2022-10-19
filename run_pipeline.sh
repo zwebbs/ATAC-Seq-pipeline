@@ -4,7 +4,9 @@
 # Created On: 2022-07-07
 # Created By: ZW
 # Purpose: runs ATAC-Seq alignment, peak calling, and analysis
-# pipeline for the given sets of FASTQ data.
+# pipeline for the given sets of FASTQ data. Currently configured for
+# a slurm-style job manager like that found on UChicago's Midway 2
+# HPC.
 
 # check passed commandline arguments
 ## of which there are three.
@@ -12,7 +14,7 @@
 ###   -c <analysis configuration file .yaml> [required]
 ###   -d (BOOLEAN flag to complete a snakemake dry run) [optional]
 
-PIPELINE_NAME="Encode-Heart-ATAC-Seq"
+PIPELINE_NAME="My-ATAC-Analysis"
 
 while getopts ":j:c:d" 'opt';
 do
@@ -47,7 +49,7 @@ module load samtools/1.9
 module load bedtools/2.27.1
 
 # set script globals
-export PICARD="/home/zweber/tools/gatk-4.2.6.1/picard.jar"
+export PICARD="/my/tools/gatk-4.2.6.1/picard.jar"
 
 # run the snakemake workflow
 snakemake --snakefile Snakefile --use-envmodules \
