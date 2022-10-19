@@ -1,0 +1,130 @@
+---
+# File Name: template-config-ATAC.yaml
+# Created By: ZW
+# Created On: 2022-07-07
+# Purpose: Generic configuration for the ATAC-Seq pipeline 
+#  found at https://github.com/zwebbs/ATAC-Seq-pipeline
+
+DOC_TYPE: "GLOBAL_CONFIG"
+analysis_name: "My-ATAC-Analysis"
+working_directory: "/my/work/dir/"
+directories: {
+  align_directory: "/my/work/dir/data/align/"
+  wig_directory: "/my/work/dir/data/wig/"
+  peaks_directory: "/my/work/dir/results/peaks/"
+  metrics_directory: "/my/work/dir/results/metrics/"
+  scratch_directory: "/my/SCRATCH/dir/"
+  logs_directory: "/my/work/dir/logs/"
+}
+files: {
+  reference_fasta: "/my/ref/genomes/GRCh38_p13/GRCh38_p13.fa",
+  reference_blacklist: "/my/ref/genomes/GRCh38_p13/GRCh38_p13.blacklist.bed", 
+  reference_genome_sizes: "/my/ref/genomes/GRCh38_p13/GRCh38_p13.chrom.sizes", 
+  sequencing: [
+    {run_id: "run-1",
+     reads_1: "/my/work/dir/data/fastq/exp1/libA/run1_R1.fastq.gz",
+     reads_2: "/my/work.dir/data/fastq/exp1/libA/run1_R2.fastq.gz",
+     library_id: "libA",
+     experiment_id: "exp1",
+     sample_type: "cell-type-1"
+    }
+  ]
+}
+---
+DOC_TYPE: "RULE_CONFIG" 
+rule_name: "BWA_Index_Reference"
+resources: {
+  walltime: "02:30:00",
+  nodes: 1,
+  cpus_per_node: 4,
+  total_memory_mb: 8000
+}
+parameters: {
+  index_files: ["GRCh38_p13.fa.amb", "GRCh38_p13.fa.ann",
+    "GRCh38_p13.fa.bwt", "GRCh38_p13.fa.pac", "GRCh38_p13.fa.sa"]
+}
+---
+DOC_TYPE: "RULE_CONFIG"
+rule_name: "BWA_MEM_Align"
+resources: {
+  walltime: "4:00:00",
+  nodes: 1,
+  cpus_per_node: 7,
+  total_memory_mb: 16000
+}
+parameters: {
+  extra_args: "-M",
+  threads: 6
+}
+---
+DOC_TYPE: "RULE_CONFIG"
+rule_name: "Picard_Mark_Duplicates"
+resources: {
+  walltime: "02:00:00",
+  nodes: 1,
+  cpus_per_node: 7,
+  total_memory_mb: 24000
+}
+parameters: {
+  extra_args: "VERBOSITY=DEBUG USE_JDK_INFLATER=true USE_JDK_DEFLATER=true"
+}
+---
+DOC_TYPE: "RULE_CONFIG"
+rule_name: "DeepTools_Filter_And_Shift"
+resources: {
+  walltime: "01:30:00",
+  nodes: 1,
+  cpus_per_node: 6,
+  total_memory_mb: 16000
+}
+parameters: {
+  extra_args: "--verbose"
+}
+---
+DOC_TYPE: "RULE_CONFIG"
+rule_name: "Merge_Library_BAMs"
+resources: {
+  walltime: "01:00:00",
+  nodes: 1,
+  cpus_per_node: 6,
+  total_memory_mb: 24000
+}
+parameters: {}
+---
+DOC_TYPE: "RULE_CONFIG"
+rule_name: "DeepTools_bamCoverage"
+resources: {
+  walltime: "01:30:00",
+  nodes: 1,
+  cpus_per_node: 6,
+  total_memory_mb: 16000
+}
+parameters: {
+  binsize: 5,
+  norm_strategy: "RPGC",
+  effective_gen_size: 2913022398
+}
+---
+DOC_TYPE: "RULE_CONFIG"
+rule_name: "MACS2_Peak_Calling_Narrow"
+resources: {
+  walltime: "01:00:00",
+  nodes: 1,
+  cpus_per_node: 6,
+  total_memory_mb: 24000
+}
+parameters: {
+  qvalue_thresh: 0.01,
+  fixed_width_ext: 250,
+  extra_args: ""
+}
+---
+DOC_TYPE: "RULE_CONFIG"
+rule_name: "Merge_fwPeak_Sets"
+resources: {
+  walltime: "00:30:00",
+  nodes: 1,
+  cpus_per_node: 4,
+  total_memory_mb: 8000
+}
+parameters: {}
