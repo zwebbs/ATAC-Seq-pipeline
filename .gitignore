@@ -8,6 +8,14 @@ logs/*.out
 logs/*.err
 logs/*.log
 
+data/align/*.bam
+data/align/*.bai
+data/align/*.bai
+data/align/*_merge.list
+data/fastq/*/*/*.fastq
+data/fastq/*/*/*.fastq.gz
+data/wig/*.bw
+data/wig/*.bigWig
 
 results/metrics/*.metrics.txt
 results/peaks/*.bed
